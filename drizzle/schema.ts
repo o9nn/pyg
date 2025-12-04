@@ -25,4 +25,80 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/**
+ * Characters table - stores AI character definitions
+ */
+export const characters = mysqlTable("characters", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  personality: text("personality").notNull(),
+  scenario: text("scenario"),
+  firstMessage: text("firstMessage").notNull(),
+  avatarUrl: text("avatarUrl"),
+  backgroundUrl: text("backgroundUrl"),
+  creatorId: int("creatorId").notNull(),
+  tags: text("tags"), // JSON string array
+  isPublic: int("isPublic").default(1).notNull(), // 1 = true, 0 = false
+  viewCount: int("viewCount").default(0).notNull(),
+  chatCount: int("chatCount").default(0).notNull(),
+  starCount: int("starCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Character = typeof characters.$inferSelect;
+export type InsertCharacter = typeof characters.$inferInsert;
+
+/**
+ * Chats table - stores conversation sessions between users and characters
+ */
+export const chats = mysqlTable("chats", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  characterId: int("characterId").notNull(),
+  title: varchar("title", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Chat = typeof chats.$inferSelect;
+export type InsertChat = typeof chats.$inferInsert;
+
+/**
+ * Messages table - stores individual messages within chats
+ */
+export const messages = mysqlTable("messages", {
+  id: int("id").autoincrement().primaryKey(),
+  chatId: int("chatId").notNull(),
+  role: mysqlEnum("role", ["user", "assistant", "system"]).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = typeof messages.$inferInsert;
+
+/**
+ * Character stars - many-to-many relationship for user favorites
+ */
+export const characterStars = mysqlTable("character_stars", {
+  userId: int("userId").notNull(),
+  characterId: int("characterId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CharacterStar = typeof characterStars.$inferSelect;
+export type InsertCharacterStar = typeof characterStars.$inferInsert;
+
+/**
+ * Follows - many-to-many relationship for following creators
+ */
+export const follows = mysqlTable("follows", {
+  followerId: int("followerId").notNull(),
+  followingId: int("followingId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Follow = typeof follows.$inferSelect;
+export type InsertFollow = typeof follows.$inferInsert;
