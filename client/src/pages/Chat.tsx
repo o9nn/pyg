@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { APP_TITLE } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { Send, Sparkles } from "lucide-react";
+import { Send, Sparkles, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
@@ -13,7 +13,10 @@ export default function Chat() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const [message, setMessage] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const { data: chat } = trpc.chats.get.useQuery({ id: parseInt(id!) });
   const { data: messages, refetch: refetchMessages } = trpc.chats.getMessages.useQuery({
@@ -25,10 +28,11 @@ export default function Chat() {
   );
 
   const sendMessage = trpc.chats.sendMessage.useMutation({
-    onSuccess: () => {
+    onSuccess: async (data) => {
       setMessage("");
-      refetchMessages();
-      // TODO: Trigger AI response via streaming endpoint
+      await refetchMessages();
+      // Trigger AI response via streaming endpoint
+      triggerAIResponse(data.content);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -41,10 +45,87 @@ export default function Chat() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, streamingMessage]);
+
+  // Cleanup EventSource on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  const triggerAIResponse = async (userMessage: string) => {
+    setIsStreaming(true);
+    setStreamingMessage("");
+
+    try {
+      const response = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chatId: parseInt(id!),
+          userMessage,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to start streaming");
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.chunk) {
+                setStreamingMessage((prev) => prev + data.chunk);
+              } else if (data.done) {
+                setIsStreaming(false);
+                setStreamingMessage("");
+                await refetchMessages();
+              } else if (data.error) {
+                toast.error(data.error);
+                setIsStreaming(false);
+                setStreamingMessage("");
+              }
+            } catch (e) {
+              console.error("Failed to parse SSE data:", e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Streaming error:", error);
+      toast.error("Failed to get AI response");
+      setIsStreaming(false);
+      setStreamingMessage("");
+    }
+  };
 
   const handleSend = () => {
-    if (!message.trim()) return;
+    if (!message.trim() || isStreaming) return;
     sendMessage.mutate({
       chatId: parseInt(id!),
       content: message.trim(),
@@ -117,6 +198,52 @@ export default function Chat() {
                 </Card>
               </div>
             ))}
+            
+            {/* Streaming message display */}
+            {isStreaming && streamingMessage && (
+              <div className="flex justify-start">
+                <Card className="max-w-[80%] bg-card">
+                  <div className="p-4">
+                    <div className="flex items-start gap-2">
+                      {character.avatarUrl && (
+                        <img src={character.avatarUrl} alt={character.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                      )}
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold mb-1">{character.name}</p>
+                        <p className="whitespace-pre-wrap">{streamingMessage}</p>
+                        <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Generating...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
+            
+            {/* Typing indicator when no content yet */}
+            {isStreaming && !streamingMessage && (
+              <div className="flex justify-start">
+                <Card className="max-w-[80%] bg-card">
+                  <div className="p-4">
+                    <div className="flex items-start gap-2">
+                      {character.avatarUrl && (
+                        <img src={character.avatarUrl} alt={character.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                      )}
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold mb-1">{character.name}</p>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Thinking...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
+            
             <div ref={messagesEndRef} />
           </div>
         </div>
@@ -130,11 +257,18 @@ export default function Chat() {
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Type your message..."
-              disabled={sendMessage.isPending}
+              disabled={sendMessage.isPending || isStreaming}
               className="flex-1"
             />
-            <Button onClick={handleSend} disabled={!message.trim() || sendMessage.isPending}>
-              <Send className="w-4 h-4" />
+            <Button 
+              onClick={handleSend} 
+              disabled={!message.trim() || sendMessage.isPending || isStreaming}
+            >
+              {sendMessage.isPending || isStreaming ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>

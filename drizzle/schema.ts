@@ -26,7 +26,7 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 /**
- * Characters table - stores AI character definitions
+ * Characters table - stores AI character definitions with NNECCO cognitive architecture
  */
 export const characters = mysqlTable("characters", {
   id: int("id").autoincrement().primaryKey(),
@@ -39,6 +39,11 @@ export const characters = mysqlTable("characters", {
   backgroundUrl: text("backgroundUrl"),
   creatorId: int("creatorId").notNull(),
   tags: text("tags"), // JSON string array
+  
+  // NNECCO Cognitive Architecture Fields
+  traits: text("traits"), // JSON string of PersonalityTraits (playfulness, intelligence, chaotic, empathy, sarcasm, selfAwareness)
+  frame: text("frame"), // JSON string of CognitiveFrame (primary, secondary)
+  
   isPublic: int("isPublic").default(1).notNull(), // 1 = true, 0 = false
   viewCount: int("viewCount").default(0).notNull(),
   chatCount: int("chatCount").default(0).notNull(),

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { createContext } from "./_core/context";
 import * as db from "./db";
-import { buildSystemPrompt, formatMessages, generateChatResponse } from "./aphrodite";
+import { buildEnhancedSystemPrompt, formatMessages, generateChatResponse } from "./aphrodite";
 
 /**
  * Streaming chat router for Server-Sent Events (SSE)
@@ -61,8 +61,8 @@ streamingRouter.post("/chat/stream", async (req, res) => {
     // Get conversation history
     const messages = await db.getChatMessages(chatId);
 
-    // Build prompt
-    const systemPrompt = buildSystemPrompt(character);
+    // Build prompt with NNECCO enhancements
+    const systemPrompt = buildEnhancedSystemPrompt(character);
     const formattedMessages = formatMessages(
       systemPrompt,
       messages.map(m => ({ role: m.role, content: m.content }))
