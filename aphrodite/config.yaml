@@ -1,0 +1,76 @@
+# Aphrodite Engine Configuration for Pygmalion NNECCO
+# Single-user development environment
+# Launch: aphrodite yaml aphrodite/config.yaml
+
+basic_args:
+  # Model to serve - use a character-chat optimized model
+  # For dev: a small quantized model that fits in limited VRAM
+  - model: PygmalionAI/pygmalion-2-7b
+  
+  # Custom model name for the API
+  - served_model_name: nnecco-dev
+
+  # Maximum context length
+  - max_model_len: 4096
+
+  # Single-user mode: allocates only as much memory as needed
+  # for a single sequence, ideal for development
+  - single_user_mode: true
+
+  # API key for authentication
+  - api_key: "pyg-dev-key"
+
+  # Port to serve on
+  - port: 2242
+
+  # Host to bind to
+  - host: "0.0.0.0"
+
+  # Disable Kobold API (not needed)
+  - launch_kobold_api: false
+
+  # Trust remote code for custom model architectures
+  - trust_remote_code: true
+
+  # Data type for KV cache - use fp16 for dev
+  - kv_cache_dtype: auto
+
+  # GPU memory utilization - conservative for dev
+  - gpu_memory_utilization: 0.85
+
+  # Quantization method (if using quantized model)
+  # - quantization: awq
+
+  # Dtype for the model
+  - dtype: auto
+
+  # Seed for reproducibility in dev
+  - seed: 42
+
+# Default sampling parameters for NNECCO character chat
+sampling_params:
+  # Temperature: moderate creativity (adjusted per-character by traits)
+  - temperature: 0.8
+
+  # Top-p sampling
+  - top_p: 0.95
+
+  # Min-p sampling for better quality
+  - min_p: 0.05
+
+  # Repetition penalty
+  - repetition_penalty: 1.15
+
+  # Frequency penalty
+  - frequency_penalty: 0.1
+
+  # Presence penalty
+  - presence_penalty: 0.1
+
+  # Max tokens per response
+  - max_tokens: 512
+
+  # DRY sampler for reducing repetition
+  # - dry_multiplier: 0.8
+  # - dry_base: 1.75
+  # - dry_allowed_length: 2

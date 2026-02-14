@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { createContext } from "./_core/context";
 import * as db from "./db";
-import { buildEnhancedSystemPrompt, formatMessages, generateChatResponse } from "./aphrodite";
+import { buildEnhancedSystemPrompt, formatMessages, generateChatResponse, adjustGenerationParams, PersonalityTraits } from "./aphrodite";
 
 /**
  * Streaming chat router for Server-Sent Events (SSE)
@@ -68,16 +68,32 @@ streamingRouter.post("/chat/stream", async (req, res) => {
       messages.map(m => ({ role: m.role, content: m.content }))
     );
 
+    // Adjust generation parameters based on character personality traits
+    let traits: PersonalityTraits | undefined;
+    try {
+      if (character.traits) {
+        traits = JSON.parse(character.traits);
+      }
+    } catch (e) {
+      console.warn("[Streaming] Failed to parse character traits:", e);
+    }
+
+    const generationParams = adjustGenerationParams(
+      { temperature: 0.8, maxTokens: 512, topP: 0.95, repetitionPenalty: 1.15 },
+      traits
+    );
+
     // Set up SSE
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
 
     let fullResponse = "";
 
     try {
-      // Stream response from Aphrodite
-      for await (const chunk of generateChatResponse(formattedMessages)) {
+      // Stream response from Aphrodite with NNECCO-adjusted params
+      for await (const chunk of generateChatResponse(formattedMessages, generationParams)) {
         fullResponse += chunk;
         res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
       }

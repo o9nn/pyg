@@ -61,13 +61,29 @@ export const appRouter = router({
         backgroundUrl: z.string().optional(),
         tags: z.array(z.string()).optional(),
         isPublic: z.boolean().optional().default(true),
+        // NNECCO Cognitive Architecture fields
+        traits: z.object({
+          playfulness: z.number().min(0).max(1).optional(),
+          intelligence: z.number().min(0).max(1).optional(),
+          chaotic: z.number().min(0).max(1).optional(),
+          empathy: z.number().min(0).max(1).optional(),
+          sarcasm: z.number().min(0).max(1).optional(),
+          selfAwareness: z.number().min(0).max(1).optional(),
+        }).optional(),
+        frame: z.object({
+          primary: z.enum(['strategy', 'play', 'chaos', 'social', 'learning']),
+          secondary: z.enum(['strategy', 'play', 'chaos', 'social', 'learning']).optional(),
+        }).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const { traits, frame, ...rest } = input;
         const characterId = await db.createCharacter({
-          ...input,
+          ...rest,
           creatorId: ctx.user.id,
           tags: input.tags ? JSON.stringify(input.tags) : null,
           isPublic: input.isPublic ? 1 : 0,
+          traits: traits ? JSON.stringify(traits) : null,
+          frame: frame ? JSON.stringify(frame) : null,
         });
         return { id: characterId };
       }),
@@ -84,6 +100,19 @@ export const appRouter = router({
         backgroundUrl: z.string().optional(),
         tags: z.array(z.string()).optional(),
         isPublic: z.boolean().optional(),
+        // NNECCO Cognitive Architecture fields
+        traits: z.object({
+          playfulness: z.number().min(0).max(1).optional(),
+          intelligence: z.number().min(0).max(1).optional(),
+          chaotic: z.number().min(0).max(1).optional(),
+          empathy: z.number().min(0).max(1).optional(),
+          sarcasm: z.number().min(0).max(1).optional(),
+          selfAwareness: z.number().min(0).max(1).optional(),
+        }).optional(),
+        frame: z.object({
+          primary: z.enum(['strategy', 'play', 'chaos', 'social', 'learning']),
+          secondary: z.enum(['strategy', 'play', 'chaos', 'social', 'learning']).optional(),
+        }).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const character = await db.getCharacterById(input.id);
@@ -94,11 +123,13 @@ export const appRouter = router({
           throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only edit your own characters' });
         }
 
-        const { id, tags, isPublic, ...updateData } = input;
+        const { id, tags, isPublic, traits, frame, ...updateData } = input;
         await db.updateCharacter(id, {
           ...updateData,
           tags: tags ? JSON.stringify(tags) : undefined,
           isPublic: isPublic !== undefined ? (isPublic ? 1 : 0) : undefined,
+          traits: traits ? JSON.stringify(traits) : undefined,
+          frame: frame ? JSON.stringify(frame) : undefined,
         });
         return { success: true };
       }),

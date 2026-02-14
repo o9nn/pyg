@@ -1,0 +1,110 @@
+version: "3.9"
+
+# Pygmalion NNECCO Platform - Docker Compose
+# Usage: docker compose up -d
+# For GPU inference: docker compose --profile gpu up -d
+
+services:
+  # ─────────────────────────────────────────────
+  # MySQL Database
+  # ─────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: pyg-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-pygmalion}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-pygmalion}
+      MYSQL_USER: ${MYSQL_USER:-pyg}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-pygmalion}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pyg-network
+
+  # ─────────────────────────────────────────────
+  # Aphrodite Inference Engine
+  # Single-user mode for development
+  # ─────────────────────────────────────────────
+  aphrodite:
+    image: alpindale/aphrodite-openai:latest
+    container_name: pyg-aphrodite
+    restart: unless-stopped
+    profiles:
+      - gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+      - ./aphrodite/config.yaml:/app/config.yaml:ro
+    ports:
+      - "2242:2242"
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+    command: >
+      --model ${APHRODITE_MODEL:-PygmalionAI/pygmalion-2-7b}
+      --served-model-name nnecco-dev
+      --max-model-len ${APHRODITE_MAX_MODEL_LEN:-4096}
+      --single-user-mode
+      --api-key ${APHRODITE_API_KEY:-pyg-dev-key}
+      --port 2242
+      --host 0.0.0.0
+      --trust-remote-code
+      --gpu-memory-utilization ${APHRODITE_GPU_MEM:-0.85}
+      --dtype auto
+      --seed 42
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2242/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - pyg-network
+
+  # ─────────────────────────────────────────────
+  # Pyg Backend + Frontend (Node.js)
+  # ─────────────────────────────────────────────
+  pyg:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pyg-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=mysql://${MYSQL_USER:-pyg}:${MYSQL_PASSWORD:-pygmalion}@mysql:3306/${MYSQL_DATABASE:-pygmalion}
+      - APHRODITE_API_URL=http://aphrodite:2242/v1
+      - APHRODITE_API_KEY=${APHRODITE_API_KEY:-pyg-dev-key}
+      - JWT_SECRET=${JWT_SECRET:-pyg-dev-jwt-secret-change-in-production}
+      - PORT=5000
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - pyg-network
+
+volumes:
+  mysql_data:
+    driver: local
+  huggingface_cache:
+    driver: local
+
+networks:
+  pyg-network:
+    driver: bridge
